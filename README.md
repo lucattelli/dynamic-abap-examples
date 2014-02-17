@@ -3,7 +3,7 @@ Dynamic ABAP Development Examples
 
 Here you can find the four examples used by me during my session at SAP Inside Track São Paulo 2011.
  - Recorded session: http://www.youtube.com/watch?v=9g_Km3iRCSQ
- - Presentation slides: http://lucattelli.com/sap/downloads/sitsp11.zip
+ - Session slides: http://lucattelli.com/sap/downloads/sitsp11.zip
  - Reference slides: http://lucattelli.com/sap/downloads/generic_programming.pdf
 
 More information about the examples:
@@ -14,4 +14,4 @@ More information about the examples:
 
 These examples should be used for learning purposes only, and I do not provide any kind of warranty regarding it's use on a production environment. You can copy it, learn from it, use it as a starting point for your own implementations, but do it at your own risk.
 
-Feel free to commit changes, corrections, improvements, more examples, etc. Thanks! ;)
+Feel free to commit changes, fixes, improvements, more examples, etc. Thanks! ;)
