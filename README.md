@@ -7,7 +7,7 @@ Here you can find the four examples used by me during my session at SAP Inside T
  - Reference slides: http://lucattelli.com/sap/downloads/generic_programming.pdf
 
 More information about the examples:
- - Example ZDYN01
+ - Example ZDYN01: this first example shows you how to use FIELD-SYMBOLS in order to read/change data inside declared variables from the same or a parent variable scope.
  - Example ZDYN02
  - Example ZDYN03
  - Example ZDYN04
