@@ -1,0 +1,37 @@
+
+report  zdyn01.
+
+data : g_time type sy-uzeit.
+
+define update_time.
+
+  assign ('G_TIME') to <time>.
+  check sy-subrc is initial.
+
+  get time.
+  <time> = sy-uzeit.
+
+  unassign <time>.
+
+end-of-definition.
+
+perform display_time.
+
+*&---------------------------------------------------------------------*
+*&      Form  display_time
+*&---------------------------------------------------------------------*
+form display_time.
+
+  field-symbols : <time> type any.
+
+  do 5 times.
+
+    wait up to 2 seconds.
+
+    update_time.
+
+    message g_time type 'I'.
+
+  enddo.
+
+endform.                    "display_time

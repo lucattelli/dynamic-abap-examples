@@ -1,0 +1,398 @@
+
+REPORT zdyn04.
+
+* text-tb0 = Candidato a transferir
+* text-tb1 = Matrícula: deixar em branco para gerar nova, preecher para atualizar uma existente
+* text-tb2 = Opções para a efetivação do funcionário
+* text-tb3 = Infotipos para transferir
+
+TABLES t777d.
+
+DEFINE bdc_dyn.
+  clear bdcdata .
+  bdcdata-program  = &1.
+  bdcdata-dynpro   = &2.
+  bdcdata-dynbegin = 'X'.
+  append bdcdata.
+END-OF-DEFINITION.
+
+DEFINE bdc_fld.
+  clear bdcdata.
+  bdcdata-fnam = &1.
+  bdcdata-fval = &2.
+  append bdcdata.
+END-OF-DEFINITION.
+
+DEFINE bdc_trx.
+  options-dismode = &3.
+  options-nobinpt = &4.
+  refresh message.
+  call transaction &1 using bdcdata options from options messages into message.
+  delete message where msgtyp ne 'A' and msgtyp ne 'E'.
+  if message[] is initial.
+    &2 = 0 .
+  else.
+    &2 = 8 .
+  endif.
+END-OF-DEFINITION.
+
+SELECTION-SCREEN BEGIN OF BLOCK b0 WITH FRAME TITLE text-tb0.
+PARAMETER aplnr TYPE aplnr.
+SELECTION-SCREEN END OF BLOCK b0.
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE text-tb1.
+PARAMETER pernr TYPE pernr_d.
+SELECTION-SCREEN END OF BLOCK b1.
+
+SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE text-tb2.
+PARAMETER begda TYPE p0000-begda DEFAULT sy-datum OBLIGATORY.
+PARAMETER endda TYPE p0000-endda DEFAULT '99991231' OBLIGATORY.
+PARAMETER massn TYPE p0000-massn DEFAULT '60' OBLIGATORY.
+PARAMETER massg TYPE p0000-massg DEFAULT '01' OBLIGATORY.
+PARAMETER plans TYPE p0001-plans OBLIGATORY.
+PARAMETER werks TYPE p0001-werks OBLIGATORY.
+PARAMETER persg TYPE p0001-persg DEFAULT '1' OBLIGATORY.
+PARAMETER persk TYPE p0001-persk DEFAULT 'AM' OBLIGATORY.
+SELECTION-SCREEN END OF BLOCK b2.
+
+SELECTION-SCREEN BEGIN OF BLOCK b3 WITH FRAME TITLE text-tb3.
+SELECT-OPTIONS itypes FOR t777d-infty NO INTERVALS.
+SELECTION-SCREEN END OF BLOCK b3.
+
+START-OF-SELECTION.
+
+  PERFORM create_pernr USING begda
+                             endda
+                             massn
+                             massg
+                             plans
+                             werks
+                             persg
+                             persk
+                    CHANGING pernr.
+
+  check not pernr is initial.
+
+  write:  / 'Número pessoal gerado: ', pernr.
+
+  LOOP AT itypes.
+    PERFORM transfer_itype USING aplnr itypes-low pernr begda endda.
+  ENDLOOP.
+
+
+
+*&---------------------------------------------------------------------*
+*&      Form  create_pernr
+*&---------------------------------------------------------------------*
+FORM create_pernr USING begda endda massn massg plans werks persg persk
+               CHANGING pernr.
+
+  DATA : BEGIN OF pernr_data,
+           begda TYPE bdcdata-fval, "Data início
+           endda TYPE bdcdata-fval, "Data fim
+           massn TYPE bdcdata-fval, "Tipo de medida
+           massg TYPE bdcdata-fval, "Motivo da medida
+           plans TYPE bdcdata-fval, "Posição
+           werks TYPE bdcdata-fval, "Área de RH
+           persg TYPE bdcdata-fval, "Grupo de empregados
+           persk TYPE bdcdata-fval, "Subgrupo de empregados
+         END OF pernr_data.
+
+  WRITE begda TO pernr_data-begda.
+  WRITE endda TO pernr_data-endda.
+  MOVE  massn TO pernr_data-massn.
+  MOVE  massg TO pernr_data-massg.
+  MOVE  plans TO pernr_data-plans.
+  MOVE  werks TO pernr_data-werks.
+  MOVE  persg TO pernr_data-persg.
+  MOVE  persk TO pernr_data-persk.
+
+* Inicialização
+  DATA : bdcdata TYPE bdcdata    OCCURS 0 WITH HEADER LINE .
+  DATA : message TYPE bdcmsgcoll OCCURS 0 WITH HEADER LINE .
+  DATA : options TYPE ctu_params OCCURS 0 WITH HEADER LINE .
+  DATA : mode    TYPE ctu_mode   VALUE 'N'.
+
+  DATA : log     TYPE z22ftbdv999log OCCURS 0 WITH HEADER LINE .
+
+  SET PARAMETER ID 'PER' FIELD space.
+
+* Tela inicial PA40
+  bdc_dyn 'SAPMP50A'        '2000'.
+  IF pernr IS INITIAL OR pernr EQ '00000000'.
+    bdc_fld 'BDC_CURSOR'      'T529T-MNTXT(01)'.
+  ELSE.
+    bdc_fld 'BDC_CURSOR'      'T529T-MNTXT(03)'.
+  ENDIF.
+  bdc_fld 'BDC_OKCODE'      '=PICK'.
+  IF pernr IS INITIAL OR pernr EQ '00000000'.
+    bdc_fld 'RP50G-SELEC(01)' 'X'.
+    bdc_fld 'RP50G-PERNR'   space.
+  ELSE.
+    bdc_fld 'RP50G-SELEC(03)' 'X'.
+    bdc_fld 'RP50G-PERNR'   pernr.
+  ENDIF.
+  bdc_fld 'BDC_SUBSCR'      'SAPMP50A                                0800SUBSCR_HEADER'.
+
+* Tela Infotipo 0000
+  bdc_dyn 'MP000000'        '2000'.
+  bdc_fld 'BDC_CURSOR'      'PSPAR-PERNR'.
+  bdc_fld 'BDC_OKCODE'      '=UPD'.
+  bdc_fld 'P0000-BEGDA'     pernr_data-begda.
+  bdc_fld 'P0000-ENDDA'     pernr_data-endda.
+  bdc_fld 'P0000-MASSN'     pernr_data-massn.
+  bdc_fld 'P0000-MASSG'     pernr_data-massg.
+  bdc_fld 'PSPAR-PLANS'     pernr_data-plans.
+  bdc_fld 'PSPAR-WERKS'     pernr_data-werks.
+  bdc_fld 'PSPAR-PERSG'     pernr_data-persg.
+  bdc_fld 'PSPAR-PERSK'     pernr_data-persk.
+
+* Abandona demais infotipos
+  IF NOT pernr IS INITIAL.
+    bdc_dyn 'MP000000'        '2000'.
+    bdc_fld 'BDC_OKCODE'      '=UPD'.
+    bdc_fld 'BDC_CURSOR'      'P0000-BEGDA'.
+  ENDIF.
+
+  bdc_dyn 'MP000100'        '2000'.
+  bdc_fld 'BDC_OKCODE'      '/EEND'.
+  bdc_fld 'BDC_CURSOR'      'P0001-BEGDA'.
+
+* Confirma abandono
+  bdc_dyn 'SAPLSPO1'        '0200'.
+  bdc_fld 'BDC_OKCODE'      '=YES'.
+
+  bdc_trx 'PA40' sy-subrc mode 'X'.
+  IF sy-subrc <> 0.
+*   log error
+  ENDIF.
+
+  IF sy-subrc IS INITIAL.
+    GET PARAMETER ID 'PER' FIELD pernr.
+  ENDIF.
+
+ENDFORM.                    "create_pernr
+
+*&---------------------------------------------------------------------*
+*&      Form  transfer_itype
+*&---------------------------------------------------------------------*
+FORM transfer_itype USING aplnr itype pernr begda endda.
+
+  DATA: line_type_native TYPE REF TO cl_abap_typedescr,
+        line_type TYPE REF TO cl_abap_structdescr,
+        table_type TYPE REF TO cl_abap_tabledescr.
+
+  DATA : applicant_table TYPE REF TO data.
+  DATA : employee_wa TYPE REF TO data.
+
+  FIELD-SYMBOLS : <applicant_table> TYPE ANY TABLE,
+                  <applicant_row>   TYPE ANY,
+                  <employee_wa>     TYPE ANY,
+                  <employee_field>  TYPE ANY.
+
+  DATA : applicant_table_name TYPE string,
+         employee_wa_name     TYPE string.
+
+  DATA : return TYPE TABLE OF bapireturn1 WITH HEADER LINE.
+
+  DATA : key    LIKE bapipakey.
+
+  DATA : infty  LIKE prelp-infty.
+
+  DATA : number LIKE p0001-pernr.
+
+  DATA : rc     TYPE sy-subrc.
+
+  CONCATENATE : 'PB' itype INTO applicant_table_name,
+                'P'  itype INTO employee_wa_name.
+
+  CALL METHOD cl_abap_typedescr=>describe_by_name
+    EXPORTING
+      p_name         = applicant_table_name
+    RECEIVING
+      p_descr_ref    = line_type_native
+    EXCEPTIONS
+      type_not_found = 1
+      OTHERS         = 2.
+
+  IF sy-subrc IS INITIAL.
+
+    line_type ?= line_type_native.
+
+    table_type = cl_abap_tabledescr=>create( p_line_type = line_type
+                                             p_table_kind = cl_abap_tabledescr=>tablekind_hashed
+                                             p_unique = 'X' ).
+
+    CREATE DATA applicant_table TYPE HANDLE table_type.
+    ASSIGN applicant_table->* TO <applicant_table>.
+
+    SELECT * FROM (applicant_table_name) INTO TABLE <applicant_table> WHERE pernr EQ aplnr.
+
+    rc = sy-subrc.
+
+  ELSE.
+
+    rc = 78.
+
+  ENDIF.
+
+  CREATE DATA employee_wa TYPE (employee_wa_name).
+
+  ASSIGN employee_wa->* TO <employee_wa>.
+
+  IF sy-subrc NE 0 OR rc NE 0.
+
+    ASSIGN ('<EMPLOYEE_WA>-PERNR') TO <employee_field>.
+    IF sy-subrc IS INITIAL.
+      <employee_field> = pernr.
+      number = pernr.
+      UNASSIGN <employee_field>.
+    ENDIF.
+
+    ASSIGN ('<EMPLOYEE_WA>-BEGDA') TO <employee_field>.
+    IF sy-subrc IS INITIAL.
+      <employee_field> = begda.
+      UNASSIGN <employee_field>.
+    ENDIF.
+
+    ASSIGN ('<EMPLOYEE_WA>-ENDDA') TO <employee_field>.
+    IF sy-subrc IS INITIAL.
+      <employee_field> = endda.
+      UNASSIGN <employee_field>.
+    ENDIF.
+
+    CALL FUNCTION 'BAPI_EMPLOYEE_ENQUEUE'
+      EXPORTING
+        number = number.
+    infty  = itype.
+
+    CALL FUNCTION 'HR_INFOTYPE_OPERATION'
+      EXPORTING
+        infty       = infty
+        number      = number
+        record      = <employee_wa>
+        operation   = 'INS'
+        dialog_mode = '0'
+      IMPORTING
+        return      = return
+        key         = key.
+
+    LOOP AT return WHERE type CA 'EA'.
+*     log error
+      EXIT.
+    ENDLOOP.
+
+    CALL FUNCTION 'BAPI_EMPLOYEE_DEQUEUE'
+      EXPORTING
+        number = number.
+
+  ENDIF.
+
+  IF rc NE 78.
+
+    LOOP AT <applicant_table> ASSIGNING <applicant_row>.
+
+      MOVE-CORRESPONDING <applicant_row> TO <employee_wa>.
+
+      ASSIGN ('<EMPLOYEE_WA>-PERNR') TO <employee_field>.
+      IF sy-subrc IS INITIAL.
+        <employee_field> = pernr.
+        number = pernr.
+        UNASSIGN <employee_field>.
+      ENDIF.
+
+      ASSIGN ('<EMPLOYEE_WA>-BEGDA') TO <employee_field>.
+      IF sy-subrc IS INITIAL.
+        <employee_field> = begda.
+        UNASSIGN <employee_field>.
+      ENDIF.
+
+      ASSIGN ('<EMPLOYEE_WA>-ENDDA') TO <employee_field>.
+      IF sy-subrc IS INITIAL.
+        <employee_field> = endda.
+        UNASSIGN <employee_field>.
+      ENDIF.
+
+      CALL FUNCTION 'BAPI_EMPLOYEE_ENQUEUE'
+        EXPORTING
+          number = number.
+
+      infty  = itype.
+
+      CALL FUNCTION 'HR_INFOTYPE_OPERATION'
+        EXPORTING
+          infty       = infty
+          number      = number
+          record      = <employee_wa>
+          operation   = 'INS'
+          dialog_mode = '0'
+        IMPORTING
+          return      = return
+          key         = key.
+      LOOP AT return WHERE type CA 'EA'.
+*       log error
+        EXIT.
+      ENDLOOP.
+
+      CALL FUNCTION 'BAPI_EMPLOYEE_DEQUEUE'
+        EXPORTING
+          number = number.
+
+    ENDLOOP.
+
+  ENDIF.
+
+ENDFORM.                    "transfer_itype
+
+*&---------------------------------------------------------------------*
+*&      Form  move_user_defined_data
+*&---------------------------------------------------------------------*
+FORM move_user_defined_data USING itype_number
+                                  itype_data_from
+                         CHANGING itype_data_to.
+
+  FIELD-SYMBOLS : <itype_from> TYPE ANY, <itype_to> TYPE ANY.
+  FIELD-SYMBOLS : <field_from> TYPE ANY, <field_to> TYPE ANY.
+
+  DATA : field_from TYPE string, field_to TYPE string.
+
+  DATA : itype_wa TYPE string.
+
+  DATA : itype_struct TYPE REF TO cl_abap_structdescr,
+         component TYPE abap_compdescr.
+
+  CONCATENATE 'P' itype_number INTO itype_wa.
+
+  ASSIGN : itype_data_from TO <itype_from> CASTING TYPE (itype_wa),
+           itype_data_to   TO <itype_to>   CASTING TYPE (itype_wa).
+
+  CHECK sy-subrc IS INITIAL.
+
+  CHECK NOT <itype_from> IS INITIAL.
+
+  itype_struct ?= cl_abap_typedescr=>describe_by_name( itype_wa ).
+
+  IF NOT itype_struct IS INITIAL.
+
+    LOOP AT itype_struct->components INTO component.
+
+      CONCATENATE : '<ITYPE_FROM>-' component-name INTO field_from,
+                    '<ITYPE_TO>-'   component-name INTO field_to.
+
+      ASSIGN : (field_from) TO <field_from>,
+               (field_to)   TO <field_to>.
+
+      IF sy-subrc IS INITIAL.
+        IF NOT <field_from> IS INITIAL.
+          <field_to> = <field_from>.
+        ENDIF.
+        UNASSIGN : <field_from>, <field_to>.
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDIF.
+
+  UNASSIGN : <itype_from>, <itype_to>.
+
+ENDFORM.                    "move_user_defined_data

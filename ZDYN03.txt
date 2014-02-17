@@ -1,0 +1,198 @@
+
+REPORT zdyn03.
+
+*----------------------------------------------------------------------*
+*       CLASS lc_report DEFINITION
+*----------------------------------------------------------------------*
+CLASS lc_report DEFINITION.
+
+  PUBLIC SECTION.
+
+    TYPE-POOLS icon.
+
+    TYPES : BEGIN OF ty_output,
+              tabname TYPE dd02t-tabname,
+              ddtext TYPE dd02t-ddtext,
+              edit TYPE icon-name,
+            END OF ty_output.
+
+    DATA _output TYPE TABLE OF ty_output.
+
+    METHODS get_data
+      IMPORTING
+        devclass TYPE tvdir-devclass.
+
+    METHODS display.
+
+  PRIVATE SECTION.
+
+    DATA _sellist TYPE TABLE OF vimsellist.
+
+    METHODS format_output CHANGING alv TYPE REF TO cl_salv_table.
+
+    METHODS on_link_click
+      FOR EVENT link_click OF cl_salv_events_table
+      IMPORTING row column.
+
+ENDCLASS.                    "lc_report DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS lc_report IMPLEMENTATION
+*----------------------------------------------------------------------*
+CLASS lc_report IMPLEMENTATION.
+
+  METHOD format_output.
+
+    DATA o_toolbar TYPE REF TO cl_salv_functions_list.
+
+    DATA o_cols TYPE REF TO cl_salv_columns_table.
+
+    DATA o_col TYPE REF TO cl_salv_column_table.
+
+    DATA o_events TYPE REF TO cl_salv_events_table.
+
+    o_toolbar ?= alv->get_functions( ).
+
+    o_toolbar->set_all( value = 'X' ).
+
+    o_cols ?= alv->get_columns( ).
+
+    TRY.
+        o_col ?= o_cols->get_column( 'EDIT' ).
+
+        o_col->set_output_length( 5 ).
+
+        o_col->set_alignment( 3 ).
+
+        CALL METHOD o_col->set_cell_type
+          EXPORTING
+            value = if_salv_c_cell_type=>hotspot.
+
+      CATCH cx_salv_not_found.                          "#EC NO_HANDLER
+
+    ENDTRY.
+
+    o_events ?= alv->get_event( ).
+
+    SET HANDLER me->on_link_click FOR o_events.
+
+  ENDMETHOD.                    "format_output
+
+  METHOD on_link_click.
+
+    DATA: l_view_name TYPE dd02v-tabname,
+          l_line TYPE ty_output.
+
+    DATA l_action.
+
+    DATA lt_sellist TYPE TABLE OF vimsellist.
+
+    CHECK column EQ 'EDIT'.
+
+    lt_sellist[] = _sellist[].
+
+    READ TABLE _output INTO l_line INDEX row.
+
+    l_view_name = l_line-tabname.
+
+    CASE l_line-edit.
+      WHEN '@0Z@'.
+        MOVE 'U' TO l_action.
+      WHEN OTHERS.
+        MOVE 'S' TO l_action.
+    ENDCASE.
+
+    CALL FUNCTION 'VIEW_MAINTENANCE_CALL'
+      EXPORTING
+        action                       = l_action
+        view_name                    = l_view_name
+      TABLES
+        dba_sellist                  = lt_sellist
+      EXCEPTIONS
+        client_reference             = 1
+        foreign_lock                 = 2
+        invalid_action               = 3
+        no_clientindependent_auth    = 4
+        no_database_function         = 5
+        no_editor_function           = 6
+        no_show_auth                 = 7
+        no_tvdir_entry               = 8
+        no_upd_auth                  = 9
+        only_show_allowed            = 10
+        system_failure               = 11
+        unknown_field_in_dba_sellist = 12
+        view_not_found               = 13
+        maintenance_prohibited       = 14
+        OTHERS                       = 15.
+
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+              WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+
+  ENDMETHOD.                    "on_link_click
+
+  METHOD get_data.
+
+    DATA: t_tvdir TYPE TABLE OF tvdir.
+
+    FIELD-SYMBOLS: <_out_item> TYPE ty_output.
+
+    SELECT * FROM tvdir INTO TABLE t_tvdir
+      WHERE
+        devclass = devclass.                          "#EC CI_SGLSELECT
+
+    CHECK sy-subrc IS INITIAL.
+
+    SELECT tabname ddtext FROM dd02t
+      INTO CORRESPONDING FIELDS OF TABLE _output
+      FOR ALL ENTRIES IN t_tvdir
+      WHERE tabname EQ t_tvdir-tabname
+        AND ddlanguage EQ sy-langu.
+
+    LOOP AT _output ASSIGNING <_out_item>.
+      <_out_item>-edit = icon_change.
+    ENDLOOP.
+
+  ENDMETHOD.                    "get_data
+
+  METHOD display.
+
+    DATA o_table TYPE REF TO cl_salv_table.
+
+    TRY.
+
+        CALL METHOD cl_salv_table=>factory
+          IMPORTING
+            r_salv_table = o_table
+          CHANGING
+            t_table      = _output[].
+
+        me->format_output( CHANGING alv = o_table ).
+
+        o_table->display( ).
+
+      CATCH
+
+        cx_salv_msg
+
+        cx_salv_not_found.
+
+    ENDTRY.
+
+  ENDMETHOD.                    "display
+
+ENDCLASS.                    "lc_report IMPLEMENTATION
+
+
+PARAMETERS: devclass TYPE tvdir-devclass.
+
+START-OF-SELECTION.
+
+  DATA o_report TYPE REF TO lc_report.
+
+  CREATE OBJECT o_report.
+
+  o_report->get_data( devclass = devclass ).
+
+  o_report->display( ).
