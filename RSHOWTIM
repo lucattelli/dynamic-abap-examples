@@ -43,6 +43,9 @@ DATA: DOCKING_CONTAINER TYPE REF TO CL_GUI_DOCKING_CONTAINER,
       DD_LEFT TYPE REF TO CL_DD_DOCUMENT,
       DD_RIGHT TYPE REF TO CL_DD_DOCUMENT.
 
+* authorization
+DATA: UPDATE_OK.
+
 * dynpro
 DATA: FCODE LIKE SY-UCOMM.
 DATA: RUNTIME_L TYPE I.
@@ -629,9 +632,11 @@ MODULE STATUS_0100 OUTPUT.
         OTHERS = 1.
     IF SY-SUBRC <> 0. MESSAGE A500. ENDIF.
 
-    CALL METHOD CODE_LEFT_EDITOR->SET_READONLY_MODE
-      EXPORTING
-        READONLY_MODE = 1.
+    IF UPDATE_OK IS INITIAL.
+      CALL METHOD CODE_LEFT_EDITOR->SET_READONLY_MODE
+        EXPORTING
+          READONLY_MODE = 1.
+    ENDIF.
 
     CREATE OBJECT H2_CONTAINER
       EXPORTING
@@ -652,9 +657,11 @@ MODULE STATUS_0100 OUTPUT.
         OTHERS = 1.
     IF SY-SUBRC <> 0. MESSAGE A500. ENDIF.
 
-    CALL METHOD CODE_RIGHT_EDITOR->SET_READONLY_MODE
-      EXPORTING
-        READONLY_MODE = 1.
+    IF UPDATE_OK IS INITIAL.
+      CALL METHOD CODE_RIGHT_EDITOR->SET_READONLY_MODE
+        EXPORTING
+          READONLY_MODE = 1.
+    ENDIF.
 
   ENDIF.
 
@@ -862,6 +869,7 @@ MODULE USER_COMMAND_0100 INPUT.
       ENDIF.
       LEAVE PROGRAM.
     WHEN 'TIME'.
+      PERFORM GET_CHANGES.
       PERFORM GET_RUNTIME.
     WHEN 'EDIL'.  PERFORM EDIT_LEFT.
     WHEN 'EDIR'.  PERFORM EDIT_RIGHT.
@@ -881,6 +889,8 @@ FORM AUTHORITY_CHECK.
         SYS_CLIINDDEP_LOCK LIKE  T000-CCNOCLIIND,
         CHANGEABILITY      TYPE  DLV_CHANGE,
         UNAME              LIKE  SY-UNAME.
+
+  CLEAR UPDATE_OK.
 
   UNAME = SY-UNAME.
   IF UNAME = 'SAP*'.
@@ -975,6 +985,8 @@ FORM AUTHORITY_CHECK.
   IF SY-SUBRC <> 0.
     MESSAGE S400(S7).
     EXIT.
+  ELSE.
+    UPDATE_OK = 'X'.
   ENDIF.
 ENDFORM.
 
@@ -1032,6 +1044,52 @@ FORM SHOW_GLOBAL.
   ENDIF.
 
 ENDFORM.                    " show_global
+*&---------------------------------------------------------------------*
+*&      Form  get_changes
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM GET_CHANGES.
+
+  DATA: CODE TYPE STANDARD TABLE OF T_SLINE,
+        CODELINE TYPE T_SLINE.
+
+  IF NOT CODE_LEFT_EDITOR IS INITIAL.
+
+    CALL METHOD CODE_LEFT_EDITOR->GET_TEXT_AS_R3TABLE
+      IMPORTING
+        TABLE = CODE
+      EXCEPTIONS
+        OTHERS = 1.
+    IF SY-SUBRC <> 0. MESSAGE A500. ENDIF.
+
+    REFRESH SL.
+    LOOP AT CODE INTO CODELINE.
+      APPEND CODELINE TO SL.
+    ENDLOOP.
+
+  ENDIF.
+
+  IF NOT CODE_RIGHT_EDITOR IS INITIAL.
+
+    CALL METHOD CODE_RIGHT_EDITOR->GET_TEXT_AS_R3TABLE
+      IMPORTING
+        TABLE = CODE
+      EXCEPTIONS
+        OTHERS = 1.
+    IF SY-SUBRC <> 0. MESSAGE A500. ENDIF.
+
+    REFRESH SR.
+    LOOP AT CODE INTO CODELINE.
+      APPEND CODELINE TO SR.
+    ENDLOOP.
+
+  ENDIF.
+
+ENDFORM.                    " get_changes
 
 *---------------------------------------------------------------------*
 *       FORM EDIT_LEFT                                                *
@@ -1040,8 +1098,30 @@ ENDFORM.                    " show_global
 *----------------------------------------------------------------------*
 FORM EDIT_LEFT.
   E[] = SL[].
-  MESSAGE S400.
-  EDITOR-CALL FOR E DISPLAY-MODE.
+  IF UPDATE_OK = 'X'.
+    EDITOR-CALL FOR E.
+  ELSE.
+    EDITOR-CALL FOR E DISPLAY-MODE.
+  ENDIF.
+  IF SY-SUBRC = 0.
+    SL[] = E[].
+  ENDIF.
+
+  DATA: CODE TYPE STANDARD TABLE OF T_SLINE,
+        CODELINE TYPE T_SLINE.
+
+  CLEAR CODE[].
+  LOOP AT SL INTO CODELINE.
+    APPEND CODELINE TO CODE.
+  ENDLOOP.
+
+  CALL METHOD CODE_LEFT_EDITOR->SET_TEXT_AS_R3TABLE
+    EXPORTING
+      TABLE = CODE
+    EXCEPTIONS
+      OTHERS = 1.
+  IF SY-SUBRC <> 0. MESSAGE A500. ENDIF.
+
 ENDFORM.
 
 
@@ -1052,6 +1132,28 @@ ENDFORM.
 *----------------------------------------------------------------------*
 FORM EDIT_RIGHT.
   E[] = SR[].
-  MESSAGE S400.
-  EDITOR-CALL FOR E DISPLAY-MODE.
+  IF UPDATE_OK = 'X'.
+    EDITOR-CALL FOR E.
+  ELSE.
+    EDITOR-CALL FOR E DISPLAY-MODE.
+  ENDIF.
+  IF SY-SUBRC = 0.
+    SR[] = E[].
+  ENDIF.
+
+  DATA: CODE TYPE STANDARD TABLE OF T_SLINE,
+        CODELINE TYPE T_SLINE.
+
+  CLEAR CODE[].
+  LOOP AT SR INTO CODELINE.
+    APPEND CODELINE TO CODE.
+  ENDLOOP.
+
+  CALL METHOD CODE_RIGHT_EDITOR->SET_TEXT_AS_R3TABLE
+    EXPORTING
+      TABLE = CODE
+    EXCEPTIONS
+      OTHERS = 1.
+  IF SY-SUBRC <> 0. MESSAGE A500. ENDIF.
+
 ENDFORM.
